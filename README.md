@@ -1,5 +1,13 @@
 # Finclair
 
+[![CI/CD](https://github.com/lindenquan/finclair/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/lindenquan/finclair/actions/workflows/ci-cd.yml)
+[![Live App](https://img.shields.io/badge/live-finclair.doctornova.net-blue?logo=googlechrome&logoColor=white)](https://finclair.doctornova.net)
+[![Version](https://img.shields.io/github/v/release/lindenquan/finclair?logo=github)](https://github.com/lindenquan/finclair/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Built with SvelteKit](https://img.shields.io/badge/SvelteKit-5-ff3e00?logo=svelte&logoColor=white)](https://kit.svelte.dev/)
+[![PWA](https://img.shields.io/badge/PWA-installable-5a0fc8?logo=pwa)](https://finclair.doctornova.net)
+
 Personal financial management — track assets, expenses, income, and every aspect of your finances in one place.
 
 ## Tech Stack

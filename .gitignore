@@ -23,6 +23,9 @@ Thumbs.db
 ehthumbs.db
 Desktop.ini
 
+# Claude Code
+.claude/settings.local.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
