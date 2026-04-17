@@ -35,6 +35,10 @@ vi.mock("firebase/firestore", () => ({
 	getFirestore: vi.fn(() => ({})),
 }));
 
+vi.mock("firebase/analytics", () => ({
+	getAnalytics: vi.fn(() => ({})),
+}));
+
 vi.mock("firebase/functions", () => ({
 	getFunctions: vi.fn(() => ({})),
 	httpsCallable: vi.fn(() => vi.fn()),
