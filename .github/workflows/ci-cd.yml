@@ -19,6 +19,8 @@ jobs:
     outputs:
       should-release: ${{ steps.check.outputs.should-release }}
       bump: ${{ steps.check.outputs.bump }}
+      deploy-app: ${{ steps.check.outputs.deploy-app }}
+      deploy-server: ${{ steps.check.outputs.deploy-server }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -55,15 +57,28 @@ jobs:
           elif echo "$MSG" | grep -qiE '^(fix|perf)(\(.*\))?:'; then
             BUMP="patch"
           fi
+
+          # Determine deploy targets from scope
+          DEPLOY_APP="false"
+          DEPLOY_SERVER="false"
           if [ -n "$BUMP" ]; then
+            SCOPE=$(echo "$MSG" | sed -n 's/^[a-z!]*(\([^)]*\)).*/\1/p')
+            case "$SCOPE" in
+              app)        DEPLOY_APP="true" ;;
+              server)     DEPLOY_SERVER="true" ;;
+              app+server) DEPLOY_APP="true"; DEPLOY_SERVER="true" ;;
+              *)          DEPLOY_APP="true"; DEPLOY_SERVER="true" ;;
+            esac
             echo "should-release=true" >> "$GITHUB_OUTPUT"
             echo "bump=$BUMP" >> "$GITHUB_OUTPUT"
           else
             echo "should-release=false" >> "$GITHUB_OUTPUT"
           fi
+          echo "deploy-app=$DEPLOY_APP" >> "$GITHUB_OUTPUT"
+          echo "deploy-server=$DEPLOY_SERVER" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-pages-artifact@v3
-        if: steps.check.outputs.should-release == 'true'
+        if: steps.check.outputs.deploy-app == 'true'
         with:
           path: build
 
@@ -107,7 +122,7 @@ jobs:
 
   deploy:
     needs: [ci, release]
-    if: needs.ci.outputs.should-release == 'true'
+    if: needs.ci.outputs.deploy-app == 'true'
     runs-on: ubuntu-latest
     environment:
       name: production
@@ -115,3 +130,28 @@ jobs:
     steps:
       - uses: actions/deploy-pages@v4
         id: deployment
+
+  deploy-functions:
+    needs: [ci, release]
+    if: needs.ci.outputs.deploy-server == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --prefix functions install --frozen-lockfile
+
+      - uses: w9jds/firebase-action@v13.29.1
+        with:
+          args: deploy --only functions
+        env:
+          GCP_SA_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}

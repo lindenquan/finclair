@@ -1,0 +1,36 @@
+#!/bin/sh
+# Simple commit message validator — no dependencies required.
+# Install: git config core.hooksPath scripts
+
+MSG=$(head -1 "$1")
+
+# Allow automated release commits
+if echo "$MSG" | grep -qE '^chore: release v'; then
+  exit 0
+fi
+
+# Valid types
+TYPES="feat|fix|docs|chore|perf|refactor|style|test|ci"
+
+# Valid scopes (optional)
+SCOPES="app|server|app\+server"
+
+# Pattern: type[(scope)]!: description
+PATTERN="^($TYPES)(\(($SCOPES)\))?\!?: .+"
+
+if ! echo "$MSG" | grep -qE "$PATTERN"; then
+  echo ""
+  echo "  Invalid commit message:"
+  echo "  $MSG"
+  echo ""
+  echo "  Expected format: type[(scope)]: description"
+  echo "  Types: feat, fix, docs, chore, perf, refactor, style, test, ci"
+  echo "  Scopes (optional): app, server, app+server"
+  echo "  Examples:"
+  echo "    feat: add login page"
+  echo "    fix(app): resolve auth redirect"
+  echo "    feat(server): add receipt endpoint"
+  echo "    feat(app+server): add Drive sync"
+  echo ""
+  exit 1
+fi

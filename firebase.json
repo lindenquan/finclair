@@ -3,15 +3,5 @@
 		"source": "functions",
 		"runtime": "nodejs22",
 		"predeploy": ["pnpm --prefix functions run build"]
-	},
-	"hosting": {
-		"public": "build",
-		"ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-		"rewrites": [
-			{
-				"source": "**",
-				"destination": "/index.html"
-			}
-		]
 	}
 }

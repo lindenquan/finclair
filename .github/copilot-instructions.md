@@ -24,10 +24,13 @@
 
 ## Commits
 
-- Follow **Conventional Commits**: `feat:`, `fix:`, `docs:`, `chore:`, `perf:`, `refactor:`, `style:`, `test:`, `ci:`
+- Follow **Conventional Commits**: `type[(scope)]: description`
+- **Types**: `feat`, `fix`, `docs`, `chore`, `perf`, `refactor`, `style`, `test`, `ci`
+- **Scopes** (optional): `app` (frontend only), `server` (functions only), `app+server` (both), or omit for both
 - **Deployable commits** (trigger prod release): `feat`, `fix`, `perf`, breaking changes
 - **Non-deployable**: `docs`, `chore`, `style`, `test`, `ci`, `refactor`
 - **Always run `pnpm lint:fix` before committing** to ensure code style is consistent
+- A local `commit-msg` hook validates format — activate with `git config core.hooksPath scripts`
 
 ## CI/CD
 
@@ -35,4 +38,5 @@
 - Custom commit parsing determines releasability — no third-party release tools
 - Releasable types: `feat` (minor), `fix`/`perf` (patch), breaking changes (major)
 - Non-releasable: `docs`, `chore`, `style`, `test`, `ci`, `refactor` — build only, no deploy
+- Deploy targets based on scope: `(app)` → GitHub Pages, `(server)` → Firebase Functions, no scope or `(app+server)` → both
 - Single production environment on GitHub Pages; custom domain to be added later

@@ -3,6 +3,7 @@
   "version": "0.2.1",
   "private": true,
   "scripts": {
+    "preinstall": "git config core.hooksPath scripts",
     "dev": "vite dev",
     "build": "vite build",
     "preview": "vite preview",
