@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+    <linearGradient id="fg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#7dd3fc"/>
+      <stop offset="100%" stop-color="#0284c7"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="1.5" stdDeviation="1" flood-color="#0c4a6e" flood-opacity="0.6"/>
+    </filter>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="url(#bg)"/>
+  <!-- Smooth rounded "F" path with 3D drop shadow -->
+  <path d="M22 47 V20 Q22 17 25 17 H42 Q44 17 44 19.5 Q44 22 42 22 H28 V29 H39 Q41 29 41 31.5 Q41 34 39 34 H28 V44 Q28 47 25 47 Z"
+        fill="url(#fg)" filter="url(#shadow)"/>
+</svg>

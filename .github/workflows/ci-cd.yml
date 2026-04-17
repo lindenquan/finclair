@@ -1,0 +1,117 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    outputs:
+      should-release: ${{ steps.check.outputs.should-release }}
+      bump: ${{ steps.check.outputs.bump }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm exec svelte-kit sync
+
+      - run: pnpm lint
+
+      - run: pnpm test
+
+      - run: pnpm build
+
+      - name: Check if commit is releasable
+        id: check
+        run: |
+          MSG=$(git log -1 --pretty=%s)
+          BUMP=""
+          if echo "$MSG" | grep -qiE '^[a-z]+\!:|BREAKING CHANGE'; then
+            BUMP="major"
+          elif echo "$MSG" | grep -qiE '^feat(\(.*\))?:'; then
+            BUMP="minor"
+          elif echo "$MSG" | grep -qiE '^(fix|perf)(\(.*\))?:'; then
+            BUMP="patch"
+          fi
+          if [ -n "$BUMP" ]; then
+            echo "should-release=true" >> "$GITHUB_OUTPUT"
+            echo "bump=$BUMP" >> "$GITHUB_OUTPUT"
+          else
+            echo "should-release=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/upload-pages-artifact@v3
+        if: steps.check.outputs.should-release == 'true'
+        with:
+          path: build
+
+  release:
+    needs: ci
+    if: needs.ci.outputs.should-release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Bump version and create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BUMP=${{ needs.ci.outputs.bump }}
+          CURRENT=$(node -p "require('./package.json').version")
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+          case "$BUMP" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+          esac
+          NEW="$MAJOR.$MINOR.$PATCH"
+          echo "Bumping $CURRENT → $NEW ($BUMP)"
+
+          # Update package.json version
+          node -e "const p=require('./package.json'); p.version='$NEW'; require('fs').writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n')"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json
+          git commit -m "chore: release v$NEW"
+          git tag "v$NEW"
+          git push
+          git push --tags
+
+          MSG=$(git log -1 --skip=1 --pretty=%s)
+          gh release create "v$NEW" --title "v$NEW" --notes "$MSG" --target main
+
+  deploy:
+    needs: [ci, release]
+    if: needs.ci.outputs.should-release == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment

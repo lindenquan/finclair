@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="description" content="Finclair — Personal Financial Management" />
+  <link rel="icon" href="%sveltekit.assets%/favicon.svg" type="image/svg+xml" />
+  <link rel="manifest" href="%sveltekit.assets%/manifest.json" />
+  <link rel="apple-touch-icon" href="%sveltekit.assets%/icon-192.png" />
+  %sveltekit.head%
+</head>
+
+<body data-sveltekit-preload-data="hover">
+  <div id="app-loader"
+    style="display:flex;align-items:center;justify-content:center;min-height:100dvh;background:#0f172a;position:fixed;inset:0;z-index:9999">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round"
+      style="opacity:0;animation:fadeIn 0.3s ease-in 300ms forwards,spin 1s linear 300ms infinite">
+      <circle cx="12" cy="12" r="10" opacity="0.25" />
+      <path d="M12 2a10 10 0 0 1 10 10" />
+    </svg>
+    <style>
+      @keyframes spin {
+        to {
+          transform: rotate(360deg)
+        }
+      }
+  
+      @keyframes fadeIn {
+        to {
+          opacity: 1
+        }
+      }
+    </style>
+  </div>
+  <div style="display: contents">%sveltekit.body%</div>
+  <script>
+    var _loaderShown = 0;
+    new MutationObserver((_, obs) => {
+      var loader = document.getElementById('app-loader');
+      if (!loader) return;
+      obs.disconnect();
+      // If spinner never became visible (<300ms load), remove immediately
+      if (!_loaderShown) { loader.remove(); return; }
+      // Otherwise wait for minimum 500ms since spinner appeared
+      var elapsed = Date.now() - _loaderShown;
+      var remaining = Math.max(0, 500 - elapsed);
+      setTimeout(() => {
+        loader.style.transition = 'opacity 0.2s';
+        loader.style.opacity = '0';
+        setTimeout(() => loader.remove(), 200);
+      }, remaining);
+    }).observe(document.body, { childList: true, subtree: true });
+    // Track when spinner becomes visible (after 300ms CSS delay)
+    setTimeout(() => { _loaderShown = Date.now(); }, 300);
+  </script>
+</body>
+
+</html>
