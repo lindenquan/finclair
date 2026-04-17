@@ -1,25 +1,26 @@
 <script lang="ts">
 	import { navigating } from "$app/stores";
-
-	const DELAY_MS = 300;
-	let showLoader = $state(false);
-	let timer: ReturnType<typeof setTimeout> | null = null;
-
-	$effect(() => {
-		if ($navigating) {
-			timer = setTimeout(() => {
-				showLoader = true;
-			}, DELAY_MS);
-		} else {
-			if (timer) clearTimeout(timer);
-			timer = null;
-			showLoader = false;
-		}
-	});
 </script>
 
-{#if showLoader}
-	<div class="fixed inset-0 z-50 flex items-center justify-center bg-base-100/80 backdrop-blur-sm">
-		<span class="loading loading-spinner loading-lg text-primary"></span>
+{#if $navigating}
+	<div class="fixed inset-x-0 top-0 z-50 h-0.5 overflow-hidden bg-primary/20">
+		<div class="h-full w-full animate-progress bg-primary"></div>
 	</div>
 {/if}
+
+<style>
+	@keyframes progress {
+		0% {
+			transform: translateX(-100%);
+		}
+		50% {
+			transform: translateX(0%);
+		}
+		100% {
+			transform: translateX(100%);
+		}
+	}
+	.animate-progress {
+		animation: progress 1.2s ease-in-out infinite;
+	}
+</style>

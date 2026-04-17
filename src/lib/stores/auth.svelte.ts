@@ -27,6 +27,7 @@ function createAuthStore() {
 	let user = $state<User | null>(null);
 	let loading = $state(!isFirebaseConfigured);
 	let ready = $state(!isFirebaseConfigured);
+	let googleAccessToken = $state<string | null>(null);
 	const offlineMode = !isFirebaseConfigured;
 
 	if (auth) {
@@ -55,13 +56,19 @@ function createAuthStore() {
 		get offlineMode() {
 			return offlineMode;
 		},
+		get accessToken() {
+			return googleAccessToken;
+		},
 
 		async login() {
 			if (!auth) return;
 			loading = true;
 			try {
 				const provider = new GoogleAuthProvider();
-				await signInWithPopup(auth, provider);
+				provider.addScope("https://www.googleapis.com/auth/drive.file");
+				const result = await signInWithPopup(auth, provider);
+				const credential = GoogleAuthProvider.credentialFromResult(result);
+				googleAccessToken = credential?.accessToken ?? null;
 			} catch {
 				loading = false;
 			}

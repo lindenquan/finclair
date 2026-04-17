@@ -27,6 +27,7 @@
 - Follow **Conventional Commits**: `feat:`, `fix:`, `docs:`, `chore:`, `perf:`, `refactor:`, `style:`, `test:`, `ci:`
 - **Deployable commits** (trigger prod release): `feat`, `fix`, `perf`, breaking changes
 - **Non-deployable**: `docs`, `chore`, `style`, `test`, `ci`, `refactor`
+- **Always run `pnpm lint:fix` before committing** to ensure code style is consistent
 
 ## CI/CD
 
