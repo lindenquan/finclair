@@ -1,0 +1,268 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    outputs:
+      should-release: ${{ steps.check.outputs.should-release }}
+      bump-app: ${{ steps.check.outputs.bump-app }}
+      bump-server: ${{ steps.check.outputs.bump-server }}
+      deploy-app: ${{ steps.check.outputs.deploy-app }}
+      deploy-server: ${{ steps.check.outputs.deploy-server }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm exec svelte-kit sync
+
+      - run: pnpm lint
+
+      - run: pnpm test
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - run: pnpm --prefix functions install --frozen-lockfile
+
+      - name: Run integration tests
+        working-directory: functions
+        run: npx firebase emulators:exec --only firestore --project demo-finclair "npx vitest run tests/"
+
+      - name: Validate Firebase env vars
+        run: |
+          MISSING=""
+          for VAR in VITE_FIREBASE_API_KEY VITE_FIREBASE_AUTH_DOMAIN VITE_FIREBASE_PROJECT_ID VITE_FIREBASE_STORAGE_BUCKET VITE_FIREBASE_MESSAGING_SENDER_ID VITE_FIREBASE_APP_ID VITE_FIREBASE_MEASUREMENT_ID VITE_APP_CHECK_SITE_KEY; do
+            if [ -z "${!VAR}" ]; then
+              MISSING="$MISSING $VAR"
+            fi
+          done
+          if [ -n "$MISSING" ]; then
+            echo "::error::Missing required env vars:$MISSING"
+            exit 1
+          fi
+        env:
+          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
+          VITE_FIREBASE_MEASUREMENT_ID: ${{ secrets.VITE_FIREBASE_MEASUREMENT_ID }}
+          VITE_APP_CHECK_SITE_KEY: ${{ secrets.VITE_APP_CHECK_SITE_KEY }}
+
+      - run: pnpm build
+        env:
+          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
+          VITE_FIREBASE_MEASUREMENT_ID: ${{ secrets.VITE_FIREBASE_MEASUREMENT_ID }}
+          VITE_APP_CHECK_SITE_KEY: ${{ secrets.VITE_APP_CHECK_SITE_KEY }}
+
+      - name: Check if commit is releasable
+        id: check
+        run: |
+          MSG=$(git log -1 --pretty=%s)
+          BUMP=""
+          if echo "$MSG" | grep -qiE '^[a-z]+\!:|BREAKING CHANGE'; then
+            BUMP="major"
+          elif echo "$MSG" | grep -qiE '^feat(\(.*\))?:'; then
+            BUMP="minor"
+          elif echo "$MSG" | grep -qiE '^(fix|perf)(\(.*\))?:'; then
+            BUMP="patch"
+          fi
+
+          DEPLOY_APP="false"
+          DEPLOY_SERVER="false"
+          BUMP_APP=""
+          BUMP_SERVER=""
+
+          if [ -n "$BUMP" ]; then
+            SCOPE=$(echo "$MSG" | sed -n 's/^[a-z!]*(\([^)]*\)).*/\1/p')
+            case "$SCOPE" in
+              app)        DEPLOY_APP="true"; BUMP_APP="$BUMP" ;;
+              server)     DEPLOY_SERVER="true"; BUMP_SERVER="$BUMP" ;;
+              app+server) DEPLOY_APP="true"; DEPLOY_SERVER="true"; BUMP_APP="$BUMP"; BUMP_SERVER="$BUMP" ;;
+              *)          DEPLOY_APP="true"; DEPLOY_SERVER="true"; BUMP_APP="$BUMP"; BUMP_SERVER="$BUMP" ;;
+            esac
+            echo "should-release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should-release=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "bump-app=$BUMP_APP" >> "$GITHUB_OUTPUT"
+          echo "bump-server=$BUMP_SERVER" >> "$GITHUB_OUTPUT"
+          echo "deploy-app=$DEPLOY_APP" >> "$GITHUB_OUTPUT"
+          echo "deploy-server=$DEPLOY_SERVER" >> "$GITHUB_OUTPUT"
+
+      - name: Archive app release
+        if: steps.check.outputs.bump-app != ''
+        run: zip -r app-release.zip build package.json pnpm-lock.yaml
+
+      - uses: actions/upload-artifact@v4
+        if: steps.check.outputs.bump-app != ''
+        with:
+          name: app-release
+          path: app-release.zip
+
+      - name: Archive server release
+        if: steps.check.outputs.bump-server != ''
+        run: zip -r server-release.zip functions firebase.json firestore.rules firestore.indexes.json package.json pnpm-lock.yaml
+
+      - uses: actions/upload-artifact@v4
+        if: steps.check.outputs.bump-server != ''
+        with:
+          name: server-release
+          path: server-release.zip
+
+      - uses: actions/upload-pages-artifact@v3
+        if: steps.check.outputs.deploy-app == 'true'
+        with:
+          path: build
+
+  release:
+    needs: ci
+    if: needs.ci.outputs.should-release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        if: needs.ci.outputs.bump-app != ''
+        with:
+          name: app-release
+
+      - uses: actions/download-artifact@v4
+        if: needs.ci.outputs.bump-server != ''
+        with:
+          name: server-release
+
+      - name: Bump version and create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BUMP_APP: ${{ needs.ci.outputs.bump-app }}
+          BUMP_SERVER: ${{ needs.ci.outputs.bump-server }}
+        run: |
+          MSG=$(git log -1 --pretty=%s)
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if [ -n "$BUMP_APP" ]; then
+            CURRENT=$(node -p "require('./package.json').version")
+            IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+            case "$BUMP_APP" in
+              major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+              minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+              patch) PATCH=$((PATCH + 1)) ;;
+            esac
+            NEW_APP="$MAJOR.$MINOR.$PATCH"
+            echo "Bumping app $CURRENT → $NEW_APP ($BUMP_APP)"
+            node -e "const p=require('./package.json'); p.version='$NEW_APP'; require('fs').writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n')"
+            git add package.json
+          fi
+
+          if [ -n "$BUMP_SERVER" ]; then
+            CURRENT=$(node -p "require('./functions/package.json').version")
+            IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+            case "$BUMP_SERVER" in
+              major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+              minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+              patch) PATCH=$((PATCH + 1)) ;;
+            esac
+            NEW_SERVER="$MAJOR.$MINOR.$PATCH"
+            echo "Bumping server $CURRENT → $NEW_SERVER ($BUMP_SERVER)"
+            node -e "const p=require('./functions/package.json'); p.version='$NEW_SERVER'; require('fs').writeFileSync('functions/package.json', JSON.stringify(p, null, 2) + '\n')"
+            git add functions/package.json
+          fi
+
+          # Single commit + push for all version bumps
+          if [ -n "$BUMP_APP" ] || [ -n "$BUMP_SERVER" ]; then
+            COMMIT_MSG="chore: release"
+            [ -n "$NEW_APP" ] && COMMIT_MSG="$COMMIT_MSG app-v$NEW_APP"
+            [ -n "$NEW_SERVER" ] && COMMIT_MSG="$COMMIT_MSG server-v$NEW_SERVER"
+            git commit -m "$COMMIT_MSG"
+            [ -n "$NEW_APP" ] && git tag "app-v$NEW_APP"
+            [ -n "$NEW_SERVER" ] && git tag "server-v$NEW_SERVER"
+            git push --follow-tags
+          fi
+
+          # Create GitHub releases
+          if [ -n "$BUMP_APP" ]; then
+            gh release create "app-v$NEW_APP" app-release.zip --title "app-v$NEW_APP" --notes "$MSG" --target main
+          fi
+          if [ -n "$BUMP_SERVER" ]; then
+            gh release create "server-v$NEW_SERVER" server-release.zip --title "server-v$NEW_SERVER" --notes "$MSG" --target main
+          fi
+
+  deploy:
+    needs: [ci, release]
+    if: needs.ci.outputs.deploy-app == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment
+
+  deploy-functions:
+    needs: [ci, release]
+    if: needs.ci.outputs.deploy-server == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --prefix functions install --frozen-lockfile
+
+      # Requires FIREBASE_SERVICE_ACCOUNT secret (JSON service account key).
+      # Generate: GCP Console → IAM → Service Accounts → select Firebase Admin SDK
+      # service account → Keys → Add Key → JSON → download.
+      # Store: GitHub repo → Settings → Secrets → Actions → FIREBASE_SERVICE_ACCOUNT
+      # → paste the entire JSON file content.
+      - name: Authenticate with GCP
+        run: |
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > /tmp/sa-key.json
+          echo "GOOGLE_APPLICATION_CREDENTIALS=/tmp/sa-key.json" >> "$GITHUB_ENV"
+
+      - run: pnpm exec firebase deploy --only functions --project ${{ secrets.VITE_FIREBASE_PROJECT_ID }}

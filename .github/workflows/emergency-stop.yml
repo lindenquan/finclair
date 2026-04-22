@@ -1,0 +1,74 @@
+name: Emergency Stop Functions
+
+on:
+  workflow_dispatch:
+    inputs:
+      functions:
+        description: "Functions to delete (comma-separated, or 'all')"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - scanReceipt
+          - getMyQuota
+          - createCheckoutSession
+          - redeemPurchase
+          - stripeWebhook
+      confirm:
+        description: "Type 'DELETE' to confirm"
+        required: true
+        type: string
+
+jobs:
+  stop-functions:
+    runs-on: ubuntu-latest
+    if: inputs.confirm == 'DELETE'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Authenticate with GCP
+        run: |
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > /tmp/sa-key.json
+          echo "GOOGLE_APPLICATION_CREDENTIALS=/tmp/sa-key.json" >> "$GITHUB_ENV"
+
+      - name: Delete functions
+        run: |
+          PROJECT=${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+          FUNCTIONS="${{ inputs.functions }}"
+
+          if [ "$FUNCTIONS" = "all" ]; then
+            FUNCTIONS="scanReceipt,getMyQuota,createCheckoutSession,redeemPurchase,stripeWebhook"
+          fi
+
+          echo "⚠️  Deleting functions: $FUNCTIONS"
+          echo "Project: $PROJECT"
+
+          IFS=',' read -ra FN_ARRAY <<< "$FUNCTIONS"
+          for fn in "${FN_ARRAY[@]}"; do
+            fn=$(echo "$fn" | xargs)  # trim whitespace
+            echo "Deleting: $fn"
+            pnpm exec firebase functions:delete "$fn" --project "$PROJECT" --force || echo "Warning: Failed to delete $fn (may not exist)"
+          done
+
+          echo "✅ Done. Functions deleted."
+
+  skip:
+    runs-on: ubuntu-latest
+    if: inputs.confirm != 'DELETE'
+    steps:
+      - run: |
+          echo "❌ Aborted: confirmation text did not match 'DELETE'"
+          echo "You entered: '${{ inputs.confirm }}'"
+          exit 1

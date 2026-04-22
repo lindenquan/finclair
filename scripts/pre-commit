@@ -1,0 +1,6 @@
+#!/bin/sh
+# Run lint check before committing.
+# Activate: git config core.hooksPath scripts
+
+pnpm lint || exit 1
+pnpm update:check
