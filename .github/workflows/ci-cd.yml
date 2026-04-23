@@ -49,6 +49,11 @@ jobs:
           distribution: temurin
           java-version: 21
 
+      - uses: actions/cache@v4
+        with:
+          path: /home/runner/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}
+
       - run: pnpm --prefix functions install --frozen-lockfile
 
       - name: Run integration tests
